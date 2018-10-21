@@ -2,42 +2,6 @@ use std::collections::{HashMap, hash_map::{Iter as HashMapIter, RandomState}};
 use std::hash::{Hash, BuildHasher};
 use std::iter::{ExactSizeIterator, FusedIterator};
 
-impl<'a, T: 'a> Iterator for AllItemsIterator<'a, T> {
-    type Item = &'a T;
-
-    fn next(&mut self) -> Option<&'a T> {
-        if self.value.is_none() {
-            None
-        } else {
-            if self.value_left == 0 {
-                if let Some((value, count)) = self.internal_iterator.next() {
-                    self.value = Some(value);
-                    self.value_left = *count;
-                    self.times_iterated += 1;
-                    self.value
-                } else {
-                    self.value = None;
-                    self.value_left = 0;
-                    None
-                }
-            } else {
-                self.value_left -= 1;
-                self.times_iterated += 1;
-                self.value
-            }
-        }
-    }
-}
-
-impl<'a, T: 'a> ExactSizeIterator for AllItemsIterator<'a, T> {
-    fn len(&self) -> usize {
-        self.total_size - self.times_iterated
-    }
-}
-
-impl<'a, T: 'a> FusedIterator for AllItemsIterator<'a, T> {
-}
-
 
 #[derive(Clone)]
 pub struct MultiHashSet<T: Eq + Hash, S : BuildHasher = RandomState> {
@@ -109,7 +73,7 @@ mod tests {
 
 
 #[derive(Clone, Debug)]
-pub struct AllItemsIterator<'a, T: 'a> {
+pub struct Iter<'a, T: 'a> {
     internal_iterator: HashMapIter<'a, T, usize>,
     value_left: usize,
     value: Option<&'a T>,
@@ -117,10 +81,10 @@ pub struct AllItemsIterator<'a, T: 'a> {
     times_iterated: usize,
 }
 
-impl<'a, T: 'a> AllItemsIterator<'a, T> {
-    fn new(internal_iterator: HashMapIter<'a, T, usize>, total_size: usize) -> AllItemsIterator<'a, T> {
+impl<'a, T: 'a> Iter<'a, T> {
+    fn new(internal_iterator: HashMapIter<'a, T, usize>, total_size: usize) -> Iter<'a, T> {
         if let Some((value, count)) = internal_iterator.clone().next() {
-            AllItemsIterator {
+            Iter {
                 internal_iterator: internal_iterator,
                 value_left: *count,
                 value: Some(value),
@@ -128,7 +92,7 @@ impl<'a, T: 'a> AllItemsIterator<'a, T> {
                 times_iterated: 0,
             }
         } else {
-            AllItemsIterator {
+            Iter {
                 internal_iterator: internal_iterator,
                 value_left: 0,
                 value: None,
@@ -139,4 +103,46 @@ impl<'a, T: 'a> AllItemsIterator<'a, T> {
     }
 }
 
-type Iter<'a, T> = AllItemsIterator<'a, T>;
+impl<'a, T: 'a> Iterator for Iter<'a, T> {
+    type Item = &'a T;
+
+    fn next(&mut self) -> Option<&'a T> {
+        if self.value.is_none() {
+            None
+        } else {
+            if self.value_left == 0 {
+                if let Some((value, count)) = self.internal_iterator.next() {
+                    self.value = Some(value);
+                    self.value_left = *count;
+                    self.times_iterated += 1;
+                    self.value
+                } else {
+                    self.value = None;
+                    self.value_left = 0;
+                    None
+                }
+            } else {
+                self.value_left -= 1;
+                self.times_iterated += 1;
+                self.value
+            }
+        }
+    }
+}
+
+impl<'a, T: 'a> ExactSizeIterator for Iter<'a, T> {
+    fn len(&self) -> usize {
+        self.total_size - self.times_iterated
+    }
+}
+
+impl<'a, T: 'a> FusedIterator for Iter<'a, T> {
+}
+
+
+#[derive(Debug)]
+struct Difference<'a, T: 'a, S: 'a> {
+    iter: Iter<'a, T>,
+    // the second set
+    other: &'a HashMap<T, usize, S>,
+}
