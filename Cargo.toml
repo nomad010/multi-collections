@@ -1,0 +1,6 @@
+[package]
+name = "multi-collections"
+version = "0.1.0"
+authors = ["nomad010 <nomad010@gmail.com>"]
+
+[dependencies]
