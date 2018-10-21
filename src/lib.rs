@@ -146,6 +146,20 @@ pub fn union<'a>(&'a self, other: &'a HashSet<T, S>) -> Union<'a, T, S>
         where T: Borrow<Q>,
               Q: Hash + Eq
     {
+        let value = self.values.get(value);
+
+        match value {
+            Some(1) => { true },
+            Some(x) => { true },
+            None => { false }
+        }
+        /*
+        if self.values.contains_key(value) {
+            self.values.get_mut()
+            true
+        } else {
+            false
+        }
         match self.values.entry(value.borrow()) {
             Entry::Occupied(o) => { 
                 let x = o.into_mut();
@@ -157,6 +171,7 @@ pub fn union<'a>(&'a self, other: &'a HashSet<T, S>) -> Union<'a, T, S>
             },
             Entry::Vacant(v) => { false }
         }
+        */
     }
 }
 
