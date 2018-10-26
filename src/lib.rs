@@ -1,7 +1,8 @@
-use std::collections::{HashMap, hash_map::{Entry, Iter as HashMapIter, RandomState}};
+use std::collections::{HashMap, hash_map::{Entry, Iter as HashMapIter, Drain as HashMapDrain, RandomState}};
 use std::hash::{Hash, BuildHasher};
-use std::iter::{ExactSizeIterator, FusedIterator};
+use std::iter::{Chain, ExactSizeIterator, FusedIterator};
 use std::borrow::Borrow;
+use std::ops::Index;
 
 
 #[derive(Clone, Debug)]
@@ -61,26 +62,31 @@ impl<T: Eq + Hash, S: BuildHasher> MultiHashSet<T, S> {
         Iter::new(self.values.iter(), self.total_size)
     }
 
-    /*
-    Iterator stuff here
+    pub fn difference<'a>(&'a self, other: &'a MultiHashSet<T, S>) -> Difference<'a, T, S> {
+        Difference {
+            iter: self.iter(),
+            other: other
+        }
+    }
 
-    pub fn difference<'a>(
-    &'a self, 
-    other: &'a HashSet<T, S>
-) -> Difference<'a, T, S>
+    pub fn symmetric_difference<'a>(&'a self, other: &'a MultiHashSet<T, S>) -> SymmetricDifference<'a, T, S> {
+        SymmetricDifference {
+            iter: self.difference(other).chain(other.difference(self)),
+        }
+    }
 
-pub fn symmetric_difference<'a>(
-    &'a self, 
-    other: &'a HashSet<T, S>
-) -> SymmetricDifference<'a, T, S>
+    pub fn intersection<'a>(&'a self, other: &'a MultiHashSet<T, S>) -> Intersection<'a, T, S> {
+        Intersection {
+            iter: self.iter(),
+            other: other
+        }
+    }
 
-pub fn intersection<'a>(
-    &'a self, 
-    other: &'a HashSet<T, S>
-) -> Intersection<'a, T, S>
-
-pub fn union<'a>(&'a self, other: &'a HashSet<T, S>) -> Union<'a, T, S>
-    */
+    pub fn union<'a>(&'a self, other: &'a MultiHashSet<T, S>) -> Union<'a, T, S> {
+        Union {
+            iter: self.iter().chain(other.difference(self))
+        }
+    }
 
     pub fn len(&self) -> usize {
         self.total_size
@@ -136,9 +142,10 @@ pub fn union<'a>(&'a self, other: &'a HashSet<T, S>) -> Union<'a, T, S>
     }
 
     pub fn insert(&mut self, value: T) -> bool {
+        self.total_size += 1;
         match self.values.entry(value) {
             Entry::Occupied(o) => { let x = o.into_mut(); *x += 1; false }
-            Entry::Vacant(v) => {v.insert(0); true }
+            Entry::Vacant(v) => {v.insert(1); true }
         }
     }
 
@@ -146,43 +153,42 @@ pub fn union<'a>(&'a self, other: &'a HashSet<T, S>) -> Union<'a, T, S>
         where T: Borrow<Q>,
               Q: Hash + Eq
     {
-        let value = self.values.get(value);
-
-        match value {
-            Some(1) => { true },
-            Some(x) => { true },
-            None => { false }
-        }
-        /*
         if self.values.contains_key(value) {
-            self.values.get_mut()
+            if self.values.get(value) == Some(&1) {
+                self.values.remove(value);
+            } else {
+                *self.values.get_mut(value).unwrap() -= 1;
+            }
+            self.total_size -= 1;
             true
         } else {
             false
         }
-        match self.values.entry(value.borrow()) {
-            Entry::Occupied(o) => { 
-                let x = o.into_mut();
-                *x -= 1;
-                if *x == 0 {
-                    o.remove_entry();
-                }
+    }
+
+    pub fn retain<F>(&mut self, mut f: F) 
+        where F: FnMut(&T, &mut usize) -> bool
+    {
+        let total_removed = &mut 0;
+        let new_f = |k: &T, v: &mut usize| {
+            if !f(k, v) {
+                *total_removed += *v;
+                false
+            } else {
                 true
-            },
-            Entry::Vacant(v) => { false }
-        }
-        */
+            }
+        };
+        self.values.retain(new_f)
     }
 }
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
+impl<'a, K: Eq + Hash + Borrow<Q>, Q: ?Sized + Eq + Hash, S: BuildHasher> Index<&'a Q> for MultiHashSet<K, S> {
+    type Output = usize;
+
+    fn index(&self, key: &Q) -> &usize {
+        self.values.get(key).unwrap_or(&0)
     }
 }
-
 
 #[derive(Clone, Debug)]
 pub struct Iter<'a, T: 'a> {
@@ -255,9 +261,9 @@ impl<'a, T: 'a> ExactSizeIterator for Iter<'a, T> {
 impl<'a, T: 'a> FusedIterator for Iter<'a, T> {
 }
 
-/*
+
 #[derive(Clone, Debug)]
-struct Difference<'a, T: 'a + Hash + Eq, S: 'a + BuildHasher> {
+pub struct Difference<'a, T: 'a + Hash + Eq, S: 'a + BuildHasher> {
     iter: Iter<'a, T>,
     // the second set
     other: &'a MultiHashSet<T, S>,
@@ -280,4 +286,135 @@ impl<'a, T: Eq + Hash, S: BuildHasher> Iterator for Difference<'a, T, S> {
         (0, upper)
     }
 }
+
+impl<'a, T: Eq + Hash, S: BuildHasher> FusedIterator for Difference<'a, T, S> {
+}
+
+#[derive(Clone, Debug)]
+pub struct SymmetricDifference<'a, T: 'a + Eq + Hash, S: 'a + BuildHasher> {
+    iter: Chain<Difference<'a, T, S>, Difference<'a, T, S>>,
+}
+
+impl<'a, T: Eq + Hash, S: BuildHasher> Iterator for SymmetricDifference<'a, T, S> {
+    type Item = &'a T;
+
+    fn next(&mut self) -> Option<&'a T> {
+        self.iter.next()
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.iter.size_hint()
+    }
+}
+
+impl<'a, T: Eq + Hash, S: BuildHasher> FusedIterator for SymmetricDifference<'a, T, S> {
+}
+
+#[derive(Clone, Debug)]
+pub struct Intersection<'a, T: 'a + Hash + Eq, S: 'a + BuildHasher> {
+    iter: Iter<'a, T>,
+    // the second set
+    other: &'a MultiHashSet<T, S>,
+}
+
+impl<'a, T: Eq + Hash, S: BuildHasher> Iterator for Intersection<'a, T, S> {
+    type Item = &'a T;
+
+    fn next(&mut self) -> Option<&'a T> {
+        loop {
+            let elt = self.iter.next()?;
+            if self.other.contains(elt) {
+                return Some(elt);
+            }
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let (_, upper) = self.iter.size_hint();
+        (0, upper)
+    }
+}
+
+impl<'a, T: Eq + Hash, S: BuildHasher> FusedIterator for Intersection<'a, T, S> {
+}
+
+#[derive(Clone, Debug)]
+pub struct Union<'a, T: 'a + Eq + Hash, S: 'a + BuildHasher> {
+    iter: Chain<Iter<'a, T>, Difference<'a, T, S>>,
+}
+
+impl<'a, T: Eq + Hash, S: BuildHasher> Iterator for Union<'a, T, S> {
+    type Item = &'a T;
+
+    fn next(&mut self) -> Option<&'a T> {
+        self.iter.next()
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.iter.size_hint()
+    }
+}
+
+impl<'a, T: Eq + Hash, S: BuildHasher> FusedIterator for Union<'a, T, S> {
+}
+
+/*
+redo
+#[derive(Clone, Debug)]
+pub struct Drain<'a, T: 'a + Eq + Hash> {
+    iter: HashMapDrain<'a, T, usize>,
+}
+
+impl<'a, T: Eq + Hash> Iterator for Drain<'a, T> {
+    type Item = &'a (T, usize);
+
+    fn next(&mut self) -> Option<&'a (T, usize)> {
+        self.iter.next()
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.iter.size_hint()
+    }
+}
+
+impl<'a, T: 'a + Eq + Hash> ExactSizeIterator for Drain<'a, T> {
+    fn len(&self) -> usize {
+        self.iter. - self.times_iterated
+    }
+}
 */
+
+impl<'a, T: Eq + Hash> FusedIterator for Drain<'a, T> {
+}
+
+#[cfg(test)]
+mod tests {
+    use super::MultiHashSet;
+
+    #[test]
+    fn test_new_capacity_0() {
+        let hashset: MultiHashSet<String> = MultiHashSet::new();
+        assert_eq!(hashset.capacity(), 0);
+        assert_eq!(hashset.len(), 0);
+    }
+
+    #[test]
+    fn test_insertions_and_deletions() {
+        let mut hashset: MultiHashSet<String> = MultiHashSet::new();
+        assert_eq!(hashset.get_count("missing"), 0);
+        hashset.insert("abcd".to_string());
+        assert_eq!(hashset.len(), 1);
+        assert_eq!(hashset.get_count("abcd"), 1);
+        assert_eq!(hashset.len(), 1);
+        assert_eq!(hashset.get_count("missing"), 0);
+        hashset.insert("abcd".to_string());
+        assert_eq!(hashset.len(), 2);
+        assert_eq!(hashset.get_count("abcd"), 2);
+        hashset.remove("abcd");
+        assert_eq!(hashset.len(), 1);
+        assert_eq!(hashset.get_count("abcd"), 1);
+        hashset.remove("abcd");
+        assert_eq!(hashset.len(), 0);
+        assert_eq!(hashset.get_count("abcd"), 0);
+    }
+}
