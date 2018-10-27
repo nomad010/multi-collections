@@ -58,8 +58,8 @@ impl<T: Eq + Hash, S: BuildHasher> MultiHashSet<T, S> {
         self.values.shrink_to_fit()
     }
 
-    pub fn iter(&self) -> Iter<T> {
-        Iter::new(self.values.iter(), self.total_size)
+    pub fn iter(&self) -> HashMapIter<T, usize> {
+        self.values.iter()
     }
 
     pub fn difference<'a>(&'a self, other: &'a MultiHashSet<T, S>) -> Difference<'a, T, S> {
@@ -222,7 +222,7 @@ impl<'a, T: 'a> Iter<'a, T> {
 }
 
 impl<'a, T: 'a> Iterator for Iter<'a, T> {
-    type Item = &'a T;
+    type Item = (&'a T, &'a usize);
 
     fn next(&mut self) -> Option<&'a T> {
         if self.value.is_none() {
@@ -312,13 +312,13 @@ impl<'a, T: Eq + Hash, S: BuildHasher> FusedIterator for SymmetricDifference<'a,
 
 #[derive(Clone, Debug)]
 pub struct Intersection<'a, T: 'a + Hash + Eq, S: 'a + BuildHasher> {
-    iter: Iter<'a, T>,
+    iter: Iter<(&'a T, &'a usize)>,
     // the second set
     other: &'a MultiHashSet<T, S>,
 }
 
 impl<'a, T: Eq + Hash, S: BuildHasher> Iterator for Intersection<'a, T, S> {
-    type Item = &'a T;
+    type Item = (&'a T, &'a usize);
 
     fn next(&mut self) -> Option<&'a T> {
         loop {
@@ -344,9 +344,9 @@ pub struct Union<'a, T: 'a + Eq + Hash, S: 'a + BuildHasher> {
 }
 
 impl<'a, T: Eq + Hash, S: BuildHasher> Iterator for Union<'a, T, S> {
-    type Item = &'a T;
+    type Item = (&'a T, &'a usize);
 
-    fn next(&mut self) -> Option<&'a T> {
+    fn next(&mut self) -> Option<(&'a T, &'a usize)> {
         self.iter.next()
     }
 
@@ -382,10 +382,10 @@ impl<'a, T: 'a + Eq + Hash> ExactSizeIterator for Drain<'a, T> {
         self.iter. - self.times_iterated
     }
 }
-*/
 
 impl<'a, T: Eq + Hash> FusedIterator for Drain<'a, T> {
 }
+*/
 
 #[cfg(test)]
 mod tests {
