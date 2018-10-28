@@ -7,6 +7,20 @@ use std::cmp::{max, min};
 use std::marker::PhantomData;
 
 
+/// A multiset built on top of `std::collections::HashMap`. Tries to maintain
+/// compatibility with `std::collections::HashSet` where it makes sense.
+///
+/// All the requirements on `std::collections::HashMap` apply. To summarize,
+/// elements must implement [`Eq`] and [`Hash`]. It is also logic error for an
+/// item to be modified in such a way that the its hash, as determined by the
+/// `std::hash::Hash` trait, or its equality, as determined by the
+/// `std::cmp::Eq` trait, changes while it is in the set.
+///
+/// The data structure strives to keep compatibility with
+/// `std::collections::HashSet`, however this is not always possible or logical.
+/// Below is a list of all the differences between `std::collections::HashSet`
+/// and [`MultiHashSet`].
+/// Examples:
 #[derive(Clone, Debug)]
 pub struct MultiHashSet<T: Eq + Hash, S : BuildHasher = RandomState> {
     values: HashMap<T, usize, S>,
@@ -14,6 +28,8 @@ pub struct MultiHashSet<T: Eq + Hash, S : BuildHasher = RandomState> {
 }
 
 impl<T: Eq + Hash> MultiHashSet<T> {
+    /// Constructs a new MultiHashSet. The underlying storage will use the
+    /// default hasher algorithm, and use a default capacity.
     pub fn new() -> MultiHashSet<T> {
         MultiHashSet { 
             values: HashMap::new(),
@@ -21,6 +37,8 @@ impl<T: Eq + Hash> MultiHashSet<T> {
         }
     }
 
+    /// Constructs a new MultiHashSet. The underlying storage will use the
+    /// default hasher algorithm, and be of the given capacity.
     pub fn with_capacity(capacity: usize) -> MultiHashSet<T> {
         MultiHashSet {
             values: HashMap::with_capacity(capacity),
@@ -30,6 +48,8 @@ impl<T: Eq + Hash> MultiHashSet<T> {
 }
 
 impl<T: Eq + Hash, S: BuildHasher> MultiHashSet<T, S> {
+    /// Constructs a new MultiHashSet. The underlying storage will use the given
+    /// hasher, and be of a default capacity.
     pub fn with_hasher(hash_builder: S) -> MultiHashSet<T, S> {
         MultiHashSet {
             values: HashMap::with_hasher(hash_builder),
@@ -37,6 +57,8 @@ impl<T: Eq + Hash, S: BuildHasher> MultiHashSet<T, S> {
         }
     }
 
+    /// Constructs a new MultiHashSet. The underlying storage will use the given
+    /// hasher and capacity.
     pub fn with_capacity_and_hasher(capacity: usize, hash_builder: S) -> MultiHashSet<T, S> {
         MultiHashSet {
             values: HashMap::with_capacity_and_hasher(capacity, hash_builder),
@@ -44,34 +66,61 @@ impl<T: Eq + Hash, S: BuildHasher> MultiHashSet<T, S> {
         }
     }
 
+    /// Returns a reference to the hasher used by the underlying storage.
     pub fn hasher(&self) -> &S {
-        &self.values.hasher()
+        self.values.hasher()
     }
 
+    /// Returns the current capacity of the underlying storage.
     pub fn capacity(&self) -> usize {
         self.values.capacity()
     }
 
+    /// Instructs the underlying storage to reserve space for additional items.
+    /// 
+    /// # Panics
+    /// Panics if the new allocation size overflows `usize`.
     pub fn reserve(&mut self, additional: usize) {
         self.values.reserve(additional)
     }
 
+    /// Shrinks the capacity of the underlying storage as much as possible.
     pub fn shrink_to_fit(&mut self) {
         self.values.shrink_to_fit()
     }
 
+    /// Returns an iterator over the items in the [`MultiHashMap`] in an
+    /// arbitrary order. The iterator's type is `(&'a T. &'a usize)`. The first
+    /// item in the type is the a reference to the item, while the second is a
+    /// reference to the number of times the item exists in the
+    /// [`MultiHashMap`]. The second element will never be zero.
     pub fn iter(&self) -> HashMapIter<T, usize> {
         self.values.iter()
     }
 
+    /// Returns an iterator over the sum of items in `self` and `other`. If an
+    /// item exists in both sets, their counts are added together. If they exist
+    /// in either, the count remains the same. The order is arbitrary and the
+    /// iterator's type is `(&'a T, usize)`.
     pub fn sum<'a, S2: 'a + BuildHasher>(&'a self, other: &'a MultiHashSet<T, S2>) -> SumIterator<'a, T, S, S2> {
         SumIterator::new(self, other)
     }
 
+    /// Returns an iterator over the difference of items in `self` and `other`.
+    /// If an item exists in `self` and `other`, the resultant count is the
+    /// difference betweemn the count in `self` and the count in `other`. If
+    /// the item's count in `self` is less than the count in `other`, the item
+    /// is ignored. together. Items that exist in `other` and not `self` are
+    /// ignored. The order is arbitrary and the iterator's type is
+    /// `(&'a T, usize)`.
     pub fn difference<'a, S2: 'a + BuildHasher>(&'a self, other: &'a MultiHashSet<T, S2>) -> DifferenceIterator<'a, T, S, S2> {
         DifferenceIterator::new(self, other)
     }
 
+    /// Returns an iterator over the minimum of items in `self` and `other`. If
+    /// an item exists in both sets, their counts are added together. If they exist
+    /// in either, the count remains the same. The order is arbitrary and the
+    /// iterator's type is `(&'a T, usize)`
     pub fn min<'a, S2: 'a + BuildHasher>(&'a self, other: &'a MultiHashSet<T, S2>) -> MinIterator<'a, T, S, S2> {
         MinIterator::new(self, other)
     }
