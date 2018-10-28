@@ -125,34 +125,54 @@ impl<T: Eq + Hash, S: BuildHasher> MultiHashSet<T, S> {
         MinIterator::new(self, other)
     }
 
+    /// Returns an iterator over the maximum of items in `self` and `other`. If
+    /// an item exists in both sets, only the largest count is output by the
+    /// iterator. If they exist in either, the count remains the same. The order
+    /// is arbitrary and the iterator's type is `(&'a T, usize)`
     pub fn max<'a, S2: 'a + BuildHasher>(&'a self, other: &'a MultiHashSet<T, S2>) -> MaxIterator<'a, T, S, S2> {
         MaxIterator::new(self, other)
     }
-
+    
+    /// Returns the number of distinct items in the MultiHashSet. Repeated items
+    /// will only be counted once.
     pub fn len(&self) -> usize {
+        self.values.len()
+    }
+
+    /// Returns the cumulative number of items in the MultiHashSet. Repeated
+    /// items will be counted multiple times. This is never less than the `len`
+    /// function's result.
+    pub fn size(&self) -> usize {
         self.total_size
     }
 
+    /// Returns whether there are items in the collection.
     pub fn is_empty(&self) -> bool {
         self.values.is_empty()
     }
 
+    /// Clears the set, returning all elements in an iterator. The size of the
+    /// collection is immediately set to 0.
     pub fn drain(&mut self) -> HashMapDrain<T, usize> {
+        self.total_size = 0;
         self.values.drain()
     }
 
+    /// Clears the set.
     pub fn clear(&mut self) {
         self.total_size = 0;
         self.values.clear()
     }
 
+    /// Returns whether at least one of the item is in the multiset.
     pub fn contains<Q: ?Sized>(&self, key: &Q) -> bool
         where T: Borrow<Q>,
               Q: Hash + Eq
     {
-        self.values.contains_key(key)
+        self.get_count(key) >= 1
     }
 
+    /// Returns the number of times the item exists in the multiset.
     pub fn get_count<Q: ?Sized>(&self, key: &Q) -> usize
         where T: Borrow<Q>,
               Q: Hash + Eq
@@ -160,6 +180,7 @@ impl<T: Eq + Hash, S: BuildHasher> MultiHashSet<T, S> {
         *self.values.get(key).unwrap_or(&0)
     }
 
+    /// Returns true if `self` contains no items in common with `other`.
     pub fn is_disjoint(&self, other: &MultiHashSet<T, S>) -> bool {
         for  (item, _count) in self.iter() {
             if other.contains(&item) {
@@ -169,6 +190,8 @@ impl<T: Eq + Hash, S: BuildHasher> MultiHashSet<T, S> {
         true
     }
 
+    /// Returns true if `self` is a strict subset of `other`. Every item in
+    /// `self` must also exist in greater quantity in `other`.
     pub fn is_strict_subset(&self, other: &MultiHashSet<T, S>) -> bool {
         for (item, count) in self.iter() {
             let other_count = other.get_count(item);
@@ -179,6 +202,8 @@ impl<T: Eq + Hash, S: BuildHasher> MultiHashSet<T, S> {
         true
     }
 
+    /// Returns true if `self` is a subset of `other`. Every item in `self` must
+    /// also exist at most as many times as it exists in `other`. 
     pub fn is_subset(&self, other: &MultiHashSet<T, S>) -> bool {
         for (item, count) in self.iter() {
             let other_count = other.get_count(item);
@@ -189,37 +214,87 @@ impl<T: Eq + Hash, S: BuildHasher> MultiHashSet<T, S> {
         true
     }
 
+    /// Returns true if `self` is a superset of `other`. Every item in `self`
+    /// must also exist at least as many times as it exists in `other`. 
     pub fn is_superset(&self, other: &MultiHashSet<T, S>) -> bool {
         other.is_subset(self)
     }
 
-    pub fn insert(&mut self, value: T) -> bool {
-        self.total_size += 1;
+    /// Returns true if `self` is a strict superset of `other`. Every item in
+    /// `other` must also exist in greater quantity in `self`.
+    pub fn is_strict_superset(&self, other: &MultiHashSet<T, S>) -> bool {
+        other.is_strict_subset(self)
+    }
+
+    /// Inserts an item multiple times into the multiset. Returns the number of
+    /// times the item was in the multiset before insertion took place. If the
+    /// item did not exist, this returns 0.
+    pub fn insert_multiple(&mut self, value: T, count: usize) -> usize {
+        self.total_size += count;
         match self.values.entry(value) {
-            Entry::Occupied(o) => { let x = o.into_mut(); *x += 1; false }
-            Entry::Vacant(v) => {v.insert(1); true }
+            Entry::Occupied(o) => { let x = o.into_mut(); let result = *x; *x += count; result }
+            Entry::Vacant(v) => {v.insert(1); 0 }
         }
     }
 
-    pub fn remove<Q: ?Sized>(&mut self, value: &Q) -> bool 
+    /// Inserts an item in the multiset. This returns the number of times the
+    /// item was in the multiset before the insertion took place. If the item
+    /// did not exist, this returns 0.
+    /// # Notable Difference
+    /// The standard library's HashSet returns true if the item was inserted in
+    /// the set. Insertions always (barring panics) succeed in a multiset so a
+    /// value of true would always be returned. The number of items that were
+    /// previously in the multiset was chosen as a more useful replacement.
+    pub fn insert(&mut self, value: T) -> usize {
+        self.insert_multiple(value, 1)
+    }
+
+    /// Removes all occurrences of an item from the multiset. If the item exists
+    /// in the multiset, this will decrease the `len` by 1.
+    pub fn remove_all<Q: ?Sized>(&mut self, value: &Q) -> usize
         where T: Borrow<Q>,
               Q: Hash + Eq
     {
-        if self.values.contains_key(value) {
-            if self.values.get(value) == Some(&1) {
-                self.values.remove(value);
-            } else {
-                *self.values.get_mut(value).unwrap() -= 1;
-            }
-            self.total_size -= 1;
-            true
-        } else {
-            false
+        let previous_count = self.get_count(value);
+        if previous_count > 0 {
+            self.values.remove(value);
+            self.total_size -= previous_count;
         }
+        previous_count
     }
 
+    /// Removes an item multiple times from the multiset. If an item's count
+    /// drops to 0 (or lower), the item is removed from the multiset.
+    pub fn remove_multiple<Q: ?Sized>(&mut self, value: &Q, count: usize) -> usize
+        where T: Borrow<Q>,
+              Q: Hash + Eq
+    {
+        let previous_count = self.get_count(value);
+        if previous_count > 0 {
+            // Item exists in the multiset
+            if previous_count <= count {
+                self.values.remove(value);
+                self.total_size -= previous_count;
+            } else {
+                *self.values.get_mut(value).unwrap() -= count;
+                self.total_size -= count;
+            }
+        }
+        previous_count
+    }
+
+    /// Removes an occurrence of an item from the multiset. If an item's count
+    /// drops to 0, the item is removed from the multiset.
+    pub fn remove<Q: ?Sized>(&mut self, value: &Q) -> usize 
+        where T: Borrow<Q>,
+              Q: Hash + Eq
+    {
+        self.remove_multiple(value, 1)
+    }
+
+    /// Retains only the elements specified by the predicate.
     pub fn retain<F>(&mut self, mut f: F) 
-        where F: FnMut(&T, &mut usize) -> bool
+        where F: FnMut(&T, &usize) -> bool
     {
         let total_removed = &mut 0;
         let new_f = |k: &T, v: &mut usize| {
@@ -230,7 +305,8 @@ impl<T: Eq + Hash, S: BuildHasher> MultiHashSet<T, S> {
                 true
             }
         };
-        self.values.retain(new_f)
+        self.values.retain(new_f);
+        self.total_size -= total_removed.clone();
     }
 }
 
