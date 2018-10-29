@@ -296,17 +296,20 @@ impl<T: Eq + Hash, S: BuildHasher> MultiHashSet<T, S> {
     pub fn retain<F>(&mut self, mut f: F) 
         where F: FnMut(&T, &usize) -> bool
     {
-        let total_removed = &mut 0;
-        let new_f = |k: &T, v: &mut usize| {
-            if !f(k, v) {
-                *total_removed += *v;
-                false
-            } else {
-                true
-            }
-        };
-        self.values.retain(new_f);
-        self.total_size -= total_removed.clone();
+        let mut total_removed = 0;
+        {
+            let total_removed_ref = &mut total_removed;
+            let new_f = |k: &T, v: &mut usize| {
+                if !f(k, v) {
+                    *total_removed_ref += *v;
+                    false
+                } else {
+                    true
+                }
+            };
+            self.values.retain(new_f);
+        }
+        self.total_size -= total_removed;
     }
 }
 
