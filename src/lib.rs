@@ -1,6 +1,6 @@
 use std::collections::{HashMap, hash_map::{Entry, Iter as HashMapIter, Drain as HashMapDrain, RandomState}};
 use std::hash::{Hash, BuildHasher};
-use std::iter::FusedIterator;
+use std::iter::{FromIterator, FusedIterator};
 use std::borrow::Borrow;
 use std::ops::Index;
 use std::cmp::{max, min};
@@ -19,8 +19,21 @@ use std::marker::PhantomData;
 /// The data structure strives to keep compatibility with
 /// `std::collections::HashSet`, however this is not always possible or logical.
 /// Below is a list of all the differences between `std::collections::HashSet`
-/// and [`MultiHashSet`].
-/// Examples:
+/// and [`MultiHashSet`]:
+/// # Examples
+/// ```rust
+/// # extern crate multi_collections;
+/// # use multi_collections::MultiHashSet;
+/// fn main() {
+///     let names: MultiHashSet<&'static str> =
+///         ["Tom", "Tom", "Dick"].iter().cloned().collect();
+///     assert_eq!(names.get_count("Tom"), 2);
+///     assert_eq!(names.get_count("Dick"), 1);
+///     assert_eq!(names.get_count("Larry"), 0);
+///     assert_eq!(names.len(), 2);
+///     assert_eq!(names.size(), 3);
+/// }
+/// ```
 #[derive(Clone, Debug)]
 pub struct MultiHashSet<T: Eq + Hash, S : BuildHasher = RandomState> {
     values: HashMap<T, usize, S>,
@@ -30,6 +43,10 @@ pub struct MultiHashSet<T: Eq + Hash, S : BuildHasher = RandomState> {
 impl<T: Eq + Hash> MultiHashSet<T> {
     /// Constructs a new MultiHashSet. The underlying storage will use the
     /// default hasher algorithm, and use a default capacity.
+    /// ```rust
+    /// use multi_collections::MultiHashSet;
+    /// let set: MultiHashSet<String> = MultiHashSet::new();
+    /// ```
     pub fn new() -> MultiHashSet<T> {
         MultiHashSet { 
             values: HashMap::new(),
@@ -39,6 +56,11 @@ impl<T: Eq + Hash> MultiHashSet<T> {
 
     /// Constructs a new MultiHashSet. The underlying storage will use the
     /// default hasher algorithm, and be of the given capacity.
+    /// ```rust
+    /// use multi_collections::MultiHashSet;
+    /// let set: MultiHashSet<String> = MultiHashSet::with_capacity(10);
+    /// assert!(set.capacity() >= 10);
+    /// ```
     pub fn with_capacity(capacity: usize) -> MultiHashSet<T> {
         MultiHashSet {
             values: HashMap::with_capacity(capacity),
@@ -50,6 +72,11 @@ impl<T: Eq + Hash> MultiHashSet<T> {
 impl<T: Eq + Hash, S: BuildHasher> MultiHashSet<T, S> {
     /// Constructs a new MultiHashSet. The underlying storage will use the given
     /// hasher, and be of a default capacity.
+    /// ```rust
+    /// use std::collections::hash_map::RandomState;
+    /// use multi_collections::MultiHashSet;
+    /// let set: MultiHashSet<String> = MultiHashSet::with_hasher(RandomState::new());
+    /// ```
     pub fn with_hasher(hash_builder: S) -> MultiHashSet<T, S> {
         MultiHashSet {
             values: HashMap::with_hasher(hash_builder),
@@ -59,6 +86,12 @@ impl<T: Eq + Hash, S: BuildHasher> MultiHashSet<T, S> {
 
     /// Constructs a new MultiHashSet. The underlying storage will use the given
     /// hasher and capacity.
+    /// ```rust
+    /// use std::collections::hash_map::RandomState;
+    /// use multi_collections::MultiHashSet;
+    /// let set: MultiHashSet<String> = MultiHashSet::with_capacity_and_hasher(10, RandomState::new());
+    /// assert!(set.capacity() >= 10);
+    /// ```
     pub fn with_capacity_and_hasher(capacity: usize, hash_builder: S) -> MultiHashSet<T, S> {
         MultiHashSet {
             values: HashMap::with_capacity_and_hasher(capacity, hash_builder),
@@ -67,11 +100,22 @@ impl<T: Eq + Hash, S: BuildHasher> MultiHashSet<T, S> {
     }
 
     /// Returns a reference to the hasher used by the underlying storage.
+    /// ```rust
+    /// use std::collections::hash_map::RandomState;
+    /// use multi_collections::MultiHashSet;
+    /// let set: MultiHashSet<String> = MultiHashSet::with_hasher(RandomState::new());
+    /// let hasher: &RandomState = set.hasher();
+    /// ```
     pub fn hasher(&self) -> &S {
         self.values.hasher()
     }
 
     /// Returns the current capacity of the underlying storage.
+    /// ```rust
+    /// use multi_collections::MultiHashSet;
+    /// let set: MultiHashSet<String> = MultiHashSet::with_capacity(10);
+    /// assert!(set.capacity() >= 10);
+    /// ```
     pub fn capacity(&self) -> usize {
         self.values.capacity()
     }
@@ -79,12 +123,26 @@ impl<T: Eq + Hash, S: BuildHasher> MultiHashSet<T, S> {
     /// Instructs the underlying storage to reserve space for additional items.
     /// 
     /// # Panics
-    /// Panics if the new allocation size overflows `usize`.
+    /// Panics if the new allocation size overflows `usize`.4
+    /// ```rust
+    /// use multi_collections::MultiHashSet;
+    /// let mut set: MultiHashSet<String> = MultiHashSet::new();
+    /// set.reserve(100);
+    /// assert!(set.capacity() >= 100);
+    /// ```
     pub fn reserve(&mut self, additional: usize) {
         self.values.reserve(additional)
     }
 
     /// Shrinks the capacity of the underlying storage as much as possible.
+    /// ```rust
+    /// use multi_collections::MultiHashSet;
+    /// let mut set: MultiHashSet<i32> = [1, 2].iter().cloned().collect();
+    /// set.reserve(100);
+    /// assert!(set.capacity() >= 100);
+    /// set.shrink_to_fit();
+    /// assert!(set.capacity() >= 2);
+    /// ```
     pub fn shrink_to_fit(&mut self) {
         self.values.shrink_to_fit()
     }
@@ -318,6 +376,28 @@ impl<'a, K: Eq + Hash + Borrow<Q>, Q: ?Sized + Eq + Hash, S: BuildHasher> Index<
 
     fn index(&self, key: &Q) -> &usize {
         self.values.get(key).unwrap_or(&0)
+    }
+}
+
+impl<T, S> FromIterator<T> for MultiHashSet<T, S>
+    where T: Eq + Hash,
+          S: BuildHasher + Default
+{
+    fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> MultiHashSet<T, S> {
+        let mut set = MultiHashSet::with_hasher(Default::default());
+        set.extend(iter);
+        set
+    }
+}
+
+impl<T, S> Extend<T> for MultiHashSet<T, S>
+    where T: Eq + Hash,
+          S: BuildHasher
+{
+    fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
+        for item in iter {
+            self.insert(item);
+        }
     }
 }
 
