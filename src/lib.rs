@@ -152,6 +152,14 @@ impl<T: Eq + Hash, S: BuildHasher> MultiHashSet<T, S> {
     /// item in the type is the a reference to the item, while the second is a
     /// reference to the number of times the item exists in the
     /// [`MultiHashMap`]. The second element will never be zero.
+    /// ```rust
+    /// use multi_collections::MultiHashSet;
+    /// let set: MultiHashSet<&str> = ["alice", "alice", "bob"].iter().cloned().collect();
+    /// // This will either print "alice has a count of 2" or "bob has a count of 1" in an arbitrary order.
+    /// for (item, count) in set.iter() {
+    ///   println!("{} has a count of {}", item, count)
+    /// }
+    /// ```
     pub fn iter(&self) -> HashMapIter<T, usize> {
         self.values.iter()
     }
@@ -160,6 +168,15 @@ impl<T: Eq + Hash, S: BuildHasher> MultiHashSet<T, S> {
     /// item exists in both sets, their counts are added together. If they exist
     /// in either, the count remains the same. The order is arbitrary and the
     /// iterator's type is `(&'a T, usize)`.
+    /// ```rust
+    /// use multi_collections::MultiHashSet;
+    /// let set1: MultiHashSet<&str> = ["alice", "alice"].iter().cloned().collect();
+    /// let set2: MultiHashSet<&str> = ["alice", "bob"].iter().cloned().collect();
+    /// // This will either print "alice has a count of 3" or "bob has a count of 1" in an arbitrary order.
+    /// for (item, count) in set1.sum(&set2) {
+    ///   println!("{} has a count of {}", item, count);
+    /// }
+    /// ```
     pub fn sum<'a, S2: 'a + BuildHasher>(&'a self, other: &'a MultiHashSet<T, S2>) -> SumIterator<'a, T, S, S2> {
         SumIterator::new(self, other)
     }
@@ -171,6 +188,15 @@ impl<T: Eq + Hash, S: BuildHasher> MultiHashSet<T, S> {
     /// is ignored. together. Items that exist in `other` and not `self` are
     /// ignored. The order is arbitrary and the iterator's type is
     /// `(&'a T, usize)`.
+    /// ```rust
+    /// use multi_collections::MultiHashSet;
+    /// let set1: MultiHashSet<&str> = ["alice", "alice"].iter().cloned().collect();
+    /// let set2: MultiHashSet<&str> = ["alice", "bob"].iter().cloned().collect();
+    /// // This will only print "alice has a count of 1".
+    /// for (item, count) in set1.difference(&set2) {
+    ///   println!("{} has a count of {}", item, count);
+    /// }
+    /// ```
     pub fn difference<'a, S2: 'a + BuildHasher>(&'a self, other: &'a MultiHashSet<T, S2>) -> DifferenceIterator<'a, T, S, S2> {
         DifferenceIterator::new(self, other)
     }
@@ -179,6 +205,15 @@ impl<T: Eq + Hash, S: BuildHasher> MultiHashSet<T, S> {
     /// an item exists in both sets, their counts are added together. If they exist
     /// in either, the count remains the same. The order is arbitrary and the
     /// iterator's type is `(&'a T, usize)`
+    /// ```rust
+    /// use multi_collections::MultiHashSet;
+    /// let set1: MultiHashSet<&str> = ["alice", "alice"].iter().cloned().collect();
+    /// let set2: MultiHashSet<&str> = ["alice", "bob"].iter().cloned().collect();
+    /// // This will only print "alice has a count of 2".
+    /// for (item, count) in set1.min(&set2) {
+    ///   println!("{} has a count of {}", item, count);
+    /// }
+    /// ```
     pub fn min<'a, S2: 'a + BuildHasher>(&'a self, other: &'a MultiHashSet<T, S2>) -> MinIterator<'a, T, S, S2> {
         MinIterator::new(self, other)
     }
@@ -187,12 +222,26 @@ impl<T: Eq + Hash, S: BuildHasher> MultiHashSet<T, S> {
     /// an item exists in both sets, only the largest count is output by the
     /// iterator. If they exist in either, the count remains the same. The order
     /// is arbitrary and the iterator's type is `(&'a T, usize)`
+    /// ```rust
+    /// use multi_collections::MultiHashSet;
+    /// let set1: MultiHashSet<&str> = ["alice", "alice"].iter().cloned().collect();
+    /// let set2: MultiHashSet<&str> = ["alice", "bob"].iter().cloned().collect();
+    /// // This will either print "alice has a count of 2" or "bob has a count of 1" in an arbitrary order.
+    /// for (item, count) in set1.max(&set2) {
+    ///   println!("{} has a count of {}", item, count);
+    /// }
+    /// ```
     pub fn max<'a, S2: 'a + BuildHasher>(&'a self, other: &'a MultiHashSet<T, S2>) -> MaxIterator<'a, T, S, S2> {
         MaxIterator::new(self, other)
     }
     
     /// Returns the number of distinct items in the MultiHashSet. Repeated items
     /// will only be counted once.
+    /// ```rust
+    /// use multi_collections::MultiHashSet;
+    /// let set: MultiHashSet<&str> = ["alice", "alice", "bob"].iter().cloned().collect();
+    /// assert_eq!(set.len(), 2);
+    /// ```
     pub fn len(&self) -> usize {
         self.values.len()
     }
@@ -200,17 +249,38 @@ impl<T: Eq + Hash, S: BuildHasher> MultiHashSet<T, S> {
     /// Returns the cumulative number of items in the MultiHashSet. Repeated
     /// items will be counted multiple times. This is never less than the `len`
     /// function's result.
+    /// ```rust
+    /// use multi_collections::MultiHashSet;
+    /// let set: MultiHashSet<&str> = ["alice", "alice", "bob"].iter().cloned().collect();
+    /// assert_eq!(set.size(), 3);
+    /// ```
     pub fn size(&self) -> usize {
         self.total_size
     }
 
     /// Returns whether there are items in the collection.
+    /// ```rust
+    /// use multi_collections::MultiHashSet;
+    /// let mut set: MultiHashSet<&str> = ["alice", "alice"].iter().cloned().collect();
+    /// assert!(!set.is_empty());
+    /// set.remove_all("alice");
+    /// assert!(set.is_empty());
+    /// ```
     pub fn is_empty(&self) -> bool {
         self.values.is_empty()
     }
 
-    /// Clears the set, returning all elements in an iterator. The size of the
-    /// collection is immediately set to 0.
+    /// Clears the set, returning all elements in an iterator.
+    /// ```rust
+    /// use multi_collections::MultiHashSet;
+    /// let mut set: MultiHashSet<&str> = ["alice", "alice", "bob"].iter().cloned().collect();
+    /// assert_eq!(set.len(), 2);
+    /// assert_eq!(set.size(), 3);
+    /// for _ in set.drain() {
+    /// }
+    /// assert_eq!(set.len(), 0);
+    /// assert_eq!(set.size(), 0);
+    /// ```
     pub fn drain(&mut self) -> HashMapDrain<T, usize> {
         self.total_size = 0;
         self.values.drain()
@@ -369,6 +439,12 @@ impl<T: Eq + Hash, S: BuildHasher> MultiHashSet<T, S> {
         }
         self.total_size -= total_removed;
     }
+
+    /// Outputs each item in the multiset. If the item is in the multiset more
+    /// than once, this will output the item once for each entry.
+    pub fn items(&self) -> ItemIterator<T> {
+        ItemIterator::new(self)
+    }
 }
 
 impl<'a, K: Eq + Hash + Borrow<Q>, Q: ?Sized + Eq + Hash, S: BuildHasher> Index<&'a Q> for MultiHashSet<K, S> {
@@ -434,6 +510,7 @@ impl<'a, T: 'a + Hash + Eq, S1: 'a + BuildHasher, S2: 'a + BuildHasher> Iterator
                     return Some((item, *count + other_count));
                 } else {
                     self.self_iterator_consumed = true;
+                    break;
                 }
             }
         }
@@ -484,8 +561,8 @@ impl<'a, T: 'a + Hash + Eq, S1: 'a + BuildHasher, S2: 'a + BuildHasher> Iterator
         loop {
             let (item, count) = self.self_iterator.next()?;
             let other_count = self.other_set.get_count(item);
-            if other_count > *count {
-                return Some((item, other_count - count));
+            if other_count < *count {
+                return Some((item, count - other_count));
             }
         }
     }
@@ -531,6 +608,7 @@ impl<'a, T: 'a + Hash + Eq, S1: 'a + BuildHasher, S2: 'a + BuildHasher> Iterator
                     return Some((item, max(*count, other_count)));
                 } else {
                     self.self_iterator_consumed = true;
+                    break;
                 }
             }
         }
@@ -597,6 +675,64 @@ impl<'a, T: 'a + Hash + Eq, S1: 'a + BuildHasher, S2: 'a + BuildHasher> FusedIte
 }
 
 
+#[derive(Clone, Debug)]
+pub struct ItemIterator<'a, T: 'a + Hash + Eq> {
+    inner_iterator: HashMapIter<'a, T, usize>,
+    last_value: Option<&'a T>,
+    last_values_left: usize,
+    total_size: usize,
+    times_iterated: usize,
+}
+
+impl<'a, T: 'a + Hash + Eq, > ItemIterator<'a, T> {
+    pub fn new<S: 'a + BuildHasher>(self_set: &'a MultiHashSet<T, S>) -> ItemIterator<'a, T> {
+        ItemIterator {
+            inner_iterator: self_set.iter(),
+            last_value: None,
+            last_values_left: 0,
+            total_size: self_set.size(),
+            times_iterated: 0,
+        }
+    }
+}
+
+impl<'a, T: 'a + Hash + Eq> Iterator for ItemIterator<'a, T> {
+    type Item = &'a T;
+
+    fn next(&mut self) -> Option<&'a T> {
+        let should_call_iterator = if let Some(_value) = self.last_value {
+            // Only refresh if the available items left is 0
+            self.last_values_left == 0
+        } else {
+            // There is no entry in the iterator's value - we need to refresh if there is
+            true
+        };
+
+        if should_call_iterator {
+            if let Some((value, count)) = self.inner_iterator.next() {
+                self.last_value = Some(value);
+                self.last_values_left = *count;
+            }
+        }
+
+        if let Some(_value) = self.last_value {
+            self.times_iterated += 1;
+            self.last_values_left -= 1;
+            self.last_value
+        } else {
+            None
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (0, Some(self.total_size))
+    }
+}
+
+impl<'a, T: 'a + Hash + Eq> FusedIterator for ItemIterator<'a, T> {
+}
+
+
 #[cfg(test)]
 mod tests {
     use super::MultiHashSet;
@@ -618,7 +754,8 @@ mod tests {
         assert_eq!(hashset.len(), 1);
         assert_eq!(hashset.get_count("missing"), 0);
         hashset.insert("abcd".to_string());
-        assert_eq!(hashset.len(), 2);
+        assert_eq!(hashset.len(), 1);
+        assert_eq!(hashset.size(), 2);
         assert_eq!(hashset.get_count("abcd"), 2);
         hashset.remove("abcd");
         assert_eq!(hashset.len(), 1);
@@ -626,5 +763,37 @@ mod tests {
         hashset.remove("abcd");
         assert_eq!(hashset.len(), 0);
         assert_eq!(hashset.get_count("abcd"), 0);
+    }
+
+    #[test]
+    fn test_sum() {
+        let set1: MultiHashSet<&str> = ["alice", "alice"].iter().cloned().collect();
+        let set2: MultiHashSet<&str> = ["alice", "bob"].iter().cloned().collect();
+        for (_item, _count) in set1.sum(&set2) {
+        }
+    }
+
+    #[test]
+    fn test_difference() {
+        let set1: MultiHashSet<&str> = ["alice", "alice"].iter().cloned().collect();
+        let set2: MultiHashSet<&str> = ["alice", "bob"].iter().cloned().collect();
+        for (_item, _count) in set1.difference(&set2) {
+        }
+    }
+
+    #[test]
+    fn test_max() {
+        let set1: MultiHashSet<&str> = ["alice", "alice"].iter().cloned().collect();
+        let set2: MultiHashSet<&str> = ["alice", "bob"].iter().cloned().collect();
+        for (_item, _count) in set1.max(&set2) {
+        }
+    }
+
+    #[test]
+    fn test_min() {
+        let set1: MultiHashSet<&str> = ["alice", "alice"].iter().cloned().collect();
+        let set2: MultiHashSet<&str> = ["alice", "bob"].iter().cloned().collect();
+        for (_item, _count) in set1.min(&set2) {
+        }
     }
 }
