@@ -123,7 +123,7 @@ impl<T: Eq + Hash, S: BuildHasher> MultiHashSet<T, S> {
     /// Instructs the underlying storage to reserve space for additional items.
     /// 
     /// # Panics
-    /// Panics if the new allocation size overflows `usize`.4
+    /// Panics if the new allocation size overflows `usize`.
     /// ```rust
     /// use multi_collections::MultiHashSet;
     /// let mut set: MultiHashSet<String> = MultiHashSet::new();
@@ -287,12 +287,28 @@ impl<T: Eq + Hash, S: BuildHasher> MultiHashSet<T, S> {
     }
 
     /// Clears the set.
+    /// ```rust
+    /// use multi_collections::MultiHashSet;
+    /// let mut set: MultiHashSet<&str> = ["alice", "alice", "bob"].iter().cloned().collect();
+    /// assert_eq!(set.len(), 2);
+    /// assert_eq!(set.size(), 3);
+    /// set.clear();
+    /// assert_eq!(set.len(), 0);
+    /// assert_eq!(set.size(), 0);
+    /// ```
     pub fn clear(&mut self) {
         self.total_size = 0;
         self.values.clear()
     }
 
-    /// Returns whether at least one of the item is in the multiset.
+    /// Returns whether at least one of an item is in the multiset.
+    /// ```rust
+    /// use multi_collections::MultiHashSet;
+    /// let set: MultiHashSet<&str> = ["alice", "alice", "bob"].iter().cloned().collect();
+    /// assert!(set.contains("alice"));
+    /// assert!(set.contains("bob"));
+    /// assert!(!set.contains("charlie"));
+    /// ```
     pub fn contains<Q: ?Sized>(&self, key: &Q) -> bool
         where T: Borrow<Q>,
               Q: Hash + Eq
@@ -301,6 +317,13 @@ impl<T: Eq + Hash, S: BuildHasher> MultiHashSet<T, S> {
     }
 
     /// Returns the number of times the item exists in the multiset.
+    /// ```rust
+    /// use multi_collections::MultiHashSet;
+    /// let set: MultiHashSet<&str> = ["alice", "alice", "bob"].iter().cloned().collect();
+    /// assert_eq!(set.get_count("alice"), 2);
+    /// assert_eq!(set.get_count("bob"), 1);
+    /// assert_eq!(set.get_count("charlie"), 0);
+    /// ```
     pub fn get_count<Q: ?Sized>(&self, key: &Q) -> usize
         where T: Borrow<Q>,
               Q: Hash + Eq
@@ -309,6 +332,15 @@ impl<T: Eq + Hash, S: BuildHasher> MultiHashSet<T, S> {
     }
 
     /// Returns true if `self` contains no items in common with `other`.
+    /// ```rust
+    /// use multi_collections::MultiHashSet;
+    /// let set1: MultiHashSet<&str> = ["alice", "bob"].iter().cloned().collect();
+    /// let set2: MultiHashSet<&str> = ["alfred", "bridget"].iter().cloned().collect();
+    /// let set3: MultiHashSet<&str> = ["alice", "bridget", "eve"].iter().cloned().collect();
+    /// assert!(set1.is_disjoint(&set2));
+    /// assert!(!set1.is_disjoint(&set3));
+    /// assert!(!set2.is_disjoint(&set3));
+    /// ```
     pub fn is_disjoint(&self, other: &MultiHashSet<T, S>) -> bool {
         for  (item, _count) in self.iter() {
             if other.contains(&item) {
@@ -318,20 +350,16 @@ impl<T: Eq + Hash, S: BuildHasher> MultiHashSet<T, S> {
         true
     }
 
-    /// Returns true if `self` is a strict subset of `other`. Every item in
-    /// `self` must also exist in greater quantity in `other`.
-    pub fn is_strict_subset(&self, other: &MultiHashSet<T, S>) -> bool {
-        for (item, count) in self.iter() {
-            let other_count = other.get_count(item);
-            if *count >= other_count {
-                return false;
-            }
-        }
-        true
-    }
-
-    /// Returns true if `self` is a subset of `other`. Every item in `self` must
-    /// also exist at most as many times as it exists in `other`. 
+    /// Returns true if `self` is a subset of `other`. `self` is a subset of
+    /// `other` if every item in `self` exists in `other`. If an item occurs
+    /// multiple times in `self` it must occur at least as many times in
+    /// `other`.
+    /// ```rust
+    /// use multi_collections::MultiHashSet;
+    /// let set1: MultiHashSet<&str> = ["alice", "alice", "bob"].iter().cloned().collect();
+    /// let set2: MultiHashSet<&str> = ["alice", "alice", "alice", "bob", "charlie"].iter().cloned().collect();
+    /// assert!(set1.is_subset(&set2));
+    /// ```
     pub fn is_subset(&self, other: &MultiHashSet<T, S>) -> bool {
         for (item, count) in self.iter() {
             let other_count = other.get_count(item);
@@ -344,14 +372,14 @@ impl<T: Eq + Hash, S: BuildHasher> MultiHashSet<T, S> {
 
     /// Returns true if `self` is a superset of `other`. Every item in `self`
     /// must also exist at least as many times as it exists in `other`. 
+    /// ```rust
+    /// use multi_collections::MultiHashSet;
+    /// let set1: MultiHashSet<&str> = ["alice", "alice", "bob"].iter().cloned().collect();
+    /// let set2: MultiHashSet<&str> = ["alice", "alice", "alice", "bob", "charlie"].iter().cloned().collect();
+    /// assert!(set2.is_superset(&set1));
+    /// ```
     pub fn is_superset(&self, other: &MultiHashSet<T, S>) -> bool {
         other.is_subset(self)
-    }
-
-    /// Returns true if `self` is a strict superset of `other`. Every item in
-    /// `other` must also exist in greater quantity in `self`.
-    pub fn is_strict_superset(&self, other: &MultiHashSet<T, S>) -> bool {
-        other.is_strict_subset(self)
     }
 
     /// Inserts an item multiple times into the multiset. Returns the number of
