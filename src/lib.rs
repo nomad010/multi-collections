@@ -2,8 +2,8 @@ use std::collections::{HashMap, hash_map::{Entry, Iter as HashMapIter, Drain as 
 use std::hash::{Hash, BuildHasher};
 use std::iter::{FromIterator, FusedIterator};
 use std::borrow::Borrow;
-use std::ops::Index;
 use std::cmp::{max, min};
+use std::ops::{Add, Sub};
 use std::marker::PhantomData;
 
 
@@ -98,6 +98,8 @@ impl<T: Eq + Hash, S: BuildHasher> MultiHashSet<T, S> {
             total_size: 0
         }
     }
+
+    
 
     /// Returns a reference to the hasher used by the underlying storage.
     /// ```rust
@@ -385,11 +387,18 @@ impl<T: Eq + Hash, S: BuildHasher> MultiHashSet<T, S> {
     /// Inserts an item multiple times into the multiset. Returns the number of
     /// times the item was in the multiset before insertion took place. If the
     /// item did not exist, this returns 0.
+    /// ```rust
+    /// use multi_collections::MultiHashSet;
+    /// let mut set: MultiHashSet<&str> = MultiHashSet::new();
+    /// assert_eq!(set.insert_multiple("alice", 1000), 0);
+    /// assert_eq!(set.insert_multiple("alice", 1000), 1000);
+    /// assert_eq!(set.get_count("alice"), 2000);
+    /// ```
     pub fn insert_multiple(&mut self, value: T, count: usize) -> usize {
         self.total_size += count;
         match self.values.entry(value) {
             Entry::Occupied(o) => { let x = o.into_mut(); let result = *x; *x += count; result }
-            Entry::Vacant(v) => {v.insert(1); 0 }
+            Entry::Vacant(v) => {if count > 0 { v.insert(count); } 0 }
         }
     }
 
@@ -401,12 +410,29 @@ impl<T: Eq + Hash, S: BuildHasher> MultiHashSet<T, S> {
     /// the set. Insertions always (barring panics) succeed in a multiset so a
     /// value of true would always be returned. The number of items that were
     /// previously in the multiset was chosen as a more useful replacement.
+    /// ```rust
+    /// use multi_collections::MultiHashSet;
+    /// let mut set: MultiHashSet<&str> = MultiHashSet::new();
+    /// assert_eq!(set.insert("alice"), 0);
+    /// assert_eq!(set.insert("alice"), 1);
+    /// assert_eq!(set.get_count("alice"), 2);
+    /// ```
     pub fn insert(&mut self, value: T) -> usize {
         self.insert_multiple(value, 1)
     }
 
     /// Removes all occurrences of an item from the multiset. If the item exists
     /// in the multiset, this will decrease the `len` by 1.
+    /// ```rust
+    /// use multi_collections::MultiHashSet;
+    /// let mut set: MultiHashSet<&str> = MultiHashSet::new();
+    /// set.insert_multiple("alice", 1000);
+    /// assert_eq!(set.get_count("alice"), 1000);
+    /// assert_eq!(set.len(), 1); 
+    /// set.remove_all("alice");
+    /// assert_eq!(set.get_count("alice"), 0);
+    /// assert_eq!(set.len(), 0);
+    /// ```
     pub fn remove_all<Q: ?Sized>(&mut self, value: &Q) -> usize
         where T: Borrow<Q>,
               Q: Hash + Eq
@@ -421,6 +447,19 @@ impl<T: Eq + Hash, S: BuildHasher> MultiHashSet<T, S> {
 
     /// Removes an item multiple times from the multiset. If an item's count
     /// drops to 0 (or lower), the item is removed from the multiset.
+    /// ```rust
+    /// use multi_collections::MultiHashSet;
+    /// let mut set: MultiHashSet<&str> = MultiHashSet::new();
+    /// set.insert_multiple("alice", 1000);
+    /// assert_eq!(set.get_count("alice"), 1000);
+    /// assert_eq!(set.len(), 1); 
+    /// set.remove_multiple("alice", 500);
+    /// assert_eq!(set.len(), 1);
+    /// assert_eq!(set.get_count("alice"), 500);
+    /// set.remove_multiple("alice", 9999);
+    /// assert_eq!(set.get_count("alice"), 0);
+    /// assert_eq!(set.len(), 0);
+    /// ```
     pub fn remove_multiple<Q: ?Sized>(&mut self, value: &Q, count: usize) -> usize
         where T: Borrow<Q>,
               Q: Hash + Eq
@@ -441,6 +480,19 @@ impl<T: Eq + Hash, S: BuildHasher> MultiHashSet<T, S> {
 
     /// Removes an occurrence of an item from the multiset. If an item's count
     /// drops to 0, the item is removed from the multiset.
+    /// ```rust
+    /// use multi_collections::MultiHashSet;
+    /// let mut set: MultiHashSet<&str> = MultiHashSet::new();
+    /// set.insert_multiple("alice", 2);
+    /// assert_eq!(set.get_count("alice"), 2);
+    /// assert_eq!(set.len(), 1);
+    /// set.remove("alice");
+    /// assert_eq!(set.get_count("alice"), 1);
+    /// assert_eq!(set.len(), 1); 
+    /// set.remove("alice");
+    /// assert_eq!(set.get_count("alice"), 0);
+    /// assert_eq!(set.len(), 0);
+    /// ```
     pub fn remove<Q: ?Sized>(&mut self, value: &Q) -> usize 
         where T: Borrow<Q>,
               Q: Hash + Eq
@@ -449,6 +501,23 @@ impl<T: Eq + Hash, S: BuildHasher> MultiHashSet<T, S> {
     }
 
     /// Retains only the elements specified by the predicate.
+    /// ```rust
+    /// use multi_collections::MultiHashSet;
+    /// let mut set: MultiHashSet<&str> = MultiHashSet::new();
+    /// set.insert_multiple("alice", 5);
+    /// set.insert_multiple("bob", 4);
+    /// set.insert_multiple("charlie", 3);
+    /// set.insert_multiple("dennis", 2);
+    /// assert_eq!(set.size(), 14);
+    /// assert_eq!(set.len(), 4);
+    /// set.retain(|v, c| v.len() % 2 == 1);
+    /// assert_eq!(set.get_count("alice"), 5);
+    /// assert_eq!(set.get_count("bob"), 4);
+    /// assert_eq!(set.get_count("charlie"), 3);
+    /// assert_eq!(set.get_count("dennis"), 0);
+    /// assert_eq!(set.size(), 12);
+    /// assert_eq!(set.len(), 3);
+    /// ```
     pub fn retain<F>(&mut self, mut f: F) 
         where F: FnMut(&T, &usize) -> bool
     {
@@ -469,17 +538,47 @@ impl<T: Eq + Hash, S: BuildHasher> MultiHashSet<T, S> {
     }
 
     /// Outputs each item in the multiset. If the item is in the multiset more
-    /// than once, this will output the item once for each entry.
+    /// than once, this will output the item once for each entry. It is
+    /// guaranteed that if an item exists multiple times, then each occurrence
+    /// of the item in the resulting iterator will be consecutive.
+    /// ```rust
+    /// use multi_collections::MultiHashSet;
+    /// let set: MultiHashSet<&str> = ["alice", "alice", "bob"].iter().cloned().collect();
+    /// // This will either print "alice,alice,bob," or "bob,alice,alice"
+    /// for item in set.items() {
+    ///   print!("{},", item)
+    /// }
+    /// ```
     pub fn items(&self) -> ItemIterator<T> {
         ItemIterator::new(self)
     }
 }
 
-impl<'a, K: Eq + Hash + Borrow<Q>, Q: ?Sized + Eq + Hash, S: BuildHasher> Index<&'a Q> for MultiHashSet<K, S> {
-    type Output = usize;
+impl<T, S> PartialEq for MultiHashSet<T, S>
+    where T: Eq + Hash,
+          S: BuildHasher
+{
+    fn eq(&self, other: &MultiHashSet<T, S>) -> bool {
+        if self.len() != other.len() {
+            return false;
+        }
 
-    fn index(&self, key: &Q) -> &usize {
-        self.values.get(key).unwrap_or(&0)
+        self.iter().all(|(key, count)| other.get_count(key) == *count)
+    }
+}
+
+impl<T, S> Eq for MultiHashSet<T, S>
+    where T: Eq + Hash,
+          S: BuildHasher
+{
+}
+
+impl<T, S> Default for MultiHashSet<T, S>
+    where T: Eq + Hash,
+          S: BuildHasher + Default
+{
+    fn default() -> Self {
+        MultiHashSet::with_hasher(Default::default())
     }
 }
 
@@ -488,6 +587,29 @@ impl<T, S> FromIterator<T> for MultiHashSet<T, S>
           S: BuildHasher + Default
 {
     fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> MultiHashSet<T, S> {
+        let mut set = MultiHashSet::with_hasher(Default::default());
+        set.extend(iter);
+        set
+    }
+}
+
+impl<T, S> FromIterator<(T, usize)> for MultiHashSet<T, S>
+    where T: Eq + Hash,
+          S: BuildHasher + Default
+{
+    fn from_iter<I: IntoIterator<Item = (T, usize)>>(iter: I) -> MultiHashSet<T, S> {
+        let mut set = MultiHashSet::with_hasher(Default::default());
+        set.extend(iter);
+        set
+    }
+}
+
+
+impl<'a, T, S> FromIterator<(&'a T, usize)> for MultiHashSet<T, S>
+    where T: 'a + Eq + Hash + Clone,
+          S: BuildHasher + Default
+{
+    fn from_iter<I: IntoIterator<Item = (&'a T, usize)>>(iter: I) -> MultiHashSet<T, S> {
         let mut set = MultiHashSet::with_hasher(Default::default());
         set.extend(iter);
         set
@@ -505,6 +627,56 @@ impl<T, S> Extend<T> for MultiHashSet<T, S>
     }
 }
 
+impl<'a, T, S> Extend<&'a T> for MultiHashSet<T, S>
+    where T: 'a + Eq + Hash + Copy,
+          S: BuildHasher
+{
+    fn extend<I: IntoIterator<Item = &'a T>>(&mut self, iter: I) {
+        self.extend(iter.into_iter().cloned())
+    }
+}
+
+impl<T, S> Extend<(T, usize)> for MultiHashSet<T, S>
+    where T: Eq + Hash,
+          S: BuildHasher
+{
+    fn extend<I: IntoIterator<Item = (T, usize)>>(&mut self, iter: I) {
+        for (item, count) in iter {
+            self.insert_multiple(item, count);
+        }
+    }
+}
+
+impl<'a, T, S> Extend<(&'a T, usize)> for MultiHashSet<T, S>
+    where T: 'a + Eq + Hash + Clone,
+          S: BuildHasher
+{
+    fn extend<I: IntoIterator<Item = (&'a T, usize)>>(&mut self, iter: I) {
+        self.extend(iter.into_iter().map(|(i, c)| (i.clone(), c)))
+    }
+}
+
+impl<'a, 'b, T, S> Add<&'b MultiHashSet<T, S>> for &'a MultiHashSet<T, S>
+    where T: Eq + Hash + Clone,
+          S: BuildHasher + Default
+{
+    type Output = MultiHashSet<T, S>;
+
+    fn add(self, rhs: &MultiHashSet<T, S>) -> MultiHashSet<T, S> {
+        self.sum(rhs).collect()
+    }
+}
+
+impl<'a, 'b, T, S> Sub<&'b MultiHashSet<T, S>> for &'a MultiHashSet<T, S>
+    where T: Eq + Hash + Clone,
+          S: BuildHasher + Default
+{
+    type Output = MultiHashSet<T, S>;
+
+    fn sub(self, rhs: &MultiHashSet<T, S>) -> MultiHashSet<T, S> {
+        self.difference(rhs).collect()
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct SumIterator<'a, T: 'a + Hash + Eq, S1: 'a + BuildHasher, S2: 'a + BuildHasher> {
@@ -740,6 +912,8 @@ impl<'a, T: 'a + Hash + Eq> Iterator for ItemIterator<'a, T> {
             if let Some((value, count)) = self.inner_iterator.next() {
                 self.last_value = Some(value);
                 self.last_values_left = *count;
+            } else {
+                self.last_value = None
             }
         }
 
@@ -823,5 +997,12 @@ mod tests {
         let set2: MultiHashSet<&str> = ["alice", "bob"].iter().cloned().collect();
         for (_item, _count) in set1.min(&set2) {
         }
+    }
+
+    #[test]
+    fn test_collect() {
+        let set: MultiHashSet<&str> = [("alice", 2), ("bob", 4)].iter().cloned().collect();
+        assert_eq!(set.len(), 2);
+        assert_eq!(set.size(), 6);
     }
 }
